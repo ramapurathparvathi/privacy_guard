@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Guard Prototype</title>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: dark navy app bar, one role switch (User / Organization), tabbed workspace under it.
+   Teal = consent granted / brand, amber = attention, red = not authorized. */
+:root{
+  --bg:#F2F5F4; --surface:#FAFBFA; --surface-2:#E6EDEB; --ink:#10242F; --muted:#4D626C; --line:#CBD7D3;
+  --brand:#17776E; --brand-strong:#0F5A53; --brand-tint:#DDEFEC; --on-brand:#F7FAF9;
+  --amber:#E9A83B; --warn-ink:#7A4E00; --warn-tint:#FBEFD3;
+  --bad:#B0332B; --bad-tint:#F8E3E0; --on-bad:#FFFFFF;
+  --bar:#0F2A3D; --on-bar:#F2F6F5; --on-bar-muted:#A8BBC4;
+  --font-body:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-mono:'DM Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0A1A23; --surface:#112633; --surface-2:#173342; --ink:#E6EEF0; --muted:#9DB1BA; --line:#26414F;
+    --brand:#46B8AA; --brand-strong:#7FD3C8; --brand-tint:#143A3A; --on-brand:#06201D;
+    --warn-ink:#F0C063; --warn-tint:#3A2E12;
+    --bad:#F2998F; --bad-tint:#3B1F1F; --on-bad:#2A0F0D;
+    --bar:#06121A; --on-bar:#E6EEF0; --on-bar-muted:#8FA5AF;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0A1A23; --surface:#112633; --surface-2:#173342; --ink:#E6EEF0; --muted:#9DB1BA; --line:#26414F;
+  --brand:#46B8AA; --brand-strong:#7FD3C8; --brand-tint:#143A3A; --on-brand:#06201D;
+  --warn-ink:#F0C063; --warn-tint:#3A2E12;
+  --bad:#F2998F; --bad-tint:#3B1F1F; --on-bad:#2A0F0D;
+  --bar:#06121A; --on-bar:#E6EEF0; --on-bar-muted:#8FA5AF;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.5}
+button,select,input,textarea{font:inherit}
+:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+.wrap{max-width:1040px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+.bar{background:var(--bar);color:var(--on-bar)}
+.bar-in{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px 24px;padding-top:14px;padding-bottom:14px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-name{font-weight:700;font-size:20px;letter-spacing:-0.01em}
+.tag{font-family:var(--font-mono);font-size:12px;text-transform:uppercase;letter-spacing:.08em;border:1px solid var(--on-bar-muted);color:var(--on-bar-muted);border-radius:4px;padding:2px 6px}
+.seg{display:inline-flex;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:3px}
+.seg button{font-weight:700;font-size:14px;color:var(--on-bar);background:transparent;border:0;border-radius:7px;padding:8px 16px;cursor:pointer;min-height:40px}
+.seg button[aria-pressed="true"]{background:var(--amber);color:#1B1405}
+
+.intro{padding-top:28px}
+h1{font-size:clamp(26px,4.2vw,38px);line-height:1.1;letter-spacing:-.02em;margin:0 0 10px;text-wrap:balance}
+.lead{color:var(--muted);max-width:64ch;margin:0}
+.ctx{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-top:20px;padding:12px 16px;background:var(--surface-2);border-radius:10px;font-size:15px}
+.ctx strong{font-weight:700}
+.sel{border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:10px 12px;border-radius:8px;min-height:44px;max-width:100%}
+
+.tabs{display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid var(--line);margin-top:20px}
+.tab{font-weight:700;color:var(--muted);background:transparent;border:0;border-bottom:3px solid transparent;padding:12px 14px;cursor:pointer;white-space:nowrap;display:flex;gap:8px;align-items:center;min-height:44px}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--brand)}
+.badge{background:var(--amber);color:#1B1405;border-radius:999px;font-size:12px;font-weight:700;min-width:20px;padding:1px 6px;text-align:center}
+
+#view{padding:24px 0 8px}
+.panel-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 16px;margin-bottom:16px}
+h2{font-size:22px;margin:0;letter-spacing:-.01em}
+.mod{font-family:var(--font-mono);font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.stack{display:grid;gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;min-width:0}
+.card h3{margin:0;font-size:18px}
+.card-top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 12px;margin-bottom:8px}
+.meta{font-family:var(--font-mono);font-size:12px;color:var(--muted)}
+.plain{margin:0 0 14px;max-width:65ch}
+.facts{display:grid;gap:10px;margin:0 0 16px}
+.facts>div{display:grid;grid-template-columns:110px 1fr;gap:8px;align-items:start}
+dt{font-size:13px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding-top:3px}
+dd{margin:0;min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:var(--brand-tint);color:var(--brand-strong);border-radius:6px;padding:3px 8px;font-size:14px;font-weight:500}
+.chip.amber{background:var(--warn-tint);color:var(--warn-ink)}
+.actions{display:flex;flex-wrap:wrap;gap:10px}
+.btn{font-weight:700;background:var(--brand);color:var(--on-brand);border:1px solid var(--brand);border-radius:8px;padding:10px 18px;min-height:44px;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.danger{background:var(--bad);color:var(--on-bad);border-color:var(--bad)}
+.btn.danger-ghost{background:transparent;color:var(--bad);border-color:var(--bad)}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:14px;font-weight:700;white-space:nowrap}
+.pill-ok{background:var(--brand-tint);color:var(--brand-strong)}
+.pill-bad{background:var(--bad-tint);color:var(--bad)}
+.pill-warn{background:var(--warn-tint);color:var(--warn-ink)}
+.pill-neutral{background:var(--surface-2);color:var(--muted)}
+
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.fbtn{font-size:14px;font-weight:700;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 14px;border-radius:999px;cursor:pointer;min-height:40px}
+.fbtn[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tablewrap{border:1px solid var(--line);border-radius:12px;overflow-x:auto;background:var(--surface)}
+table.log{width:100%;border-collapse:collapse}
+table.log th{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);font-weight:700}
+table.log td{padding:14px;border-bottom:1px solid var(--line);vertical-align:top}
+table.log tr:last-child td{border-bottom:0}
+.sub{display:block;font-size:13px;color:var(--muted)}
+.when{font-family:var(--font-mono);font-size:13px;white-space:nowrap}
+@media (max-width:720px){
+  table.log thead{display:none}
+  table.log,table.log tbody,table.log tr{display:block}
+  table.log tr{padding:12px 14px;border-bottom:1px solid var(--line)}
+  table.log tr:last-child{border-bottom:0}
+  table.log td{display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px;border:0;padding:4px 0}
+  table.log td::before{content:attr(data-label);font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700;padding-top:3px}
+  .when{white-space:normal}
+  .facts>div{grid-template-columns:1fr;gap:2px}
+}
+
+.form{display:grid;gap:20px;max-width:640px}
+fieldset{border:0;padding:0;margin:0;min-width:0}
+legend{font-weight:700;margin-bottom:8px;padding:0}
+label.lbl{display:block;font-weight:700;margin-bottom:6px}
+.opts{display:flex;flex-wrap:wrap;gap:8px}
+.opt{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:10px 12px;cursor:pointer;min-height:44px}
+.opt input{width:18px;height:18px;accent-color:var(--brand)}
+.hint{font-size:14px;color:var(--muted);margin:6px 0 0}
+.err{color:var(--bad);font-weight:700;font-size:14px;margin:8px 0 0}
+.sent{background:var(--brand-tint);border:1px solid var(--brand);border-radius:12px;padding:16px 18px;margin-bottom:20px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between}
+.sent p{margin:0}
+.verdict{margin-top:24px;border-radius:12px;padding:18px 20px;border:1px solid;max-width:640px}
+.verdict.ok{background:var(--brand-tint);border-color:var(--brand)}
+.verdict.bad{background:var(--bad-tint);border-color:var(--bad)}
+.verdict h3{margin:0 0 4px;font-size:18px}
+.verdict p{margin:0}
+ul.checks{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:8px}
+ul.checks li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 10px;align-items:start}
+.sect{margin-top:32px}
+.sect h3{font-size:18px;margin:0 0 12px}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.stat b{display:block;font-size:30px;line-height:1.1;font-variant-numeric:tabular-nums}
+.stat span{font-size:14px;color:var(--muted)}
+.num{font-variant-numeric:tabular-nums}
+textarea.audit{width:100%;min-height:150px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:12px;font-family:var(--font-mono);font-size:13px;line-height:1.5;resize:vertical}
+
+.notes{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.note{display:grid;grid-template-columns:12px minmax(0,1fr);gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.note .dot{width:10px;height:10px;border-radius:50%;margin-top:7px;background:var(--line)}
+.note.unread{border-color:var(--amber)}
+.note.unread .dot{background:var(--amber)}
+.note p{margin:0 0 4px}
+.empty{border:1px dashed var(--line);border-radius:12px;padding:28px;text-align:center;color:var(--muted)}
+.empty p{margin:0 auto;max-width:48ch}
+
+.foot{padding-top:28px;padding-bottom:40px;color:var(--muted);font-size:14px;display:flex;flex-wrap:wrap;gap:12px 24px;justify-content:space-between;align-items:center}
+.foot p{margin:0;max-width:60ch}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:10px;max-width:min(92vw,520px);z-index:20;font-weight:500;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+@media (prefers-reduced-motion: no-preference){.toast{animation:rise .2s ease-out}@keyframes rise{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+
+<header class="bar"><div class="wrap bar-in">
+  <div class="brand">
+    <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 2l10 4v7c0 6.2-4.2 11.2-10 13C8.2 24.2 4 19.2 4 13V6l10-4z" fill="#17776E" stroke="#E9A83B" stroke-width="1.5"/><rect x="9.5" y="12" width="9" height="7" rx="1.5" fill="#F7F6F1"/><path d="M11.5 12v-2a2.5 2.5 0 015 0v2" fill="none" stroke="#F7F6F1" stroke-width="1.6"/></svg>
+    <span class="brand-name">Privacy Guard</span><span class="tag">Prototype</span>
+  </div>
+  <div class="seg" role="group" aria-label="Choose who you are">
+    <button id="role-user" type="button" data-action="role" data-role="user" aria-pressed="true">User</button>
+    <button id="role-org" type="button" data-action="role" data-role="org" aria-pressed="false">Organization</button>
+  </div>
+</div></header>
+
+<main class="wrap">
+  <section class="intro">
+    <h1>Consent and Data Sharing Tracker</h1>
+    <p class="lead">A working model of the Privacy Guard design. Play the organization that asks for consent and shares data, then switch to the user who decides and checks the record. All data here is sample data kept in this page.</p>
+  </section>
+  <div class="ctx" id="ctx"></div>
+  <div class="tabs" id="tabs" role="tablist" aria-label="Sections"></div>
+  <div id="view" role="tabpanel" tabindex="-1"></div>
+</main>
+
+<footer class="wrap foot">
+  <p>Privacy Guard keeps records of consent and sharing. It never stores the personal data itself.</p>
+  <button type="button" class="btn ghost" id="reset-btn" data-action="reset">Reset sample data</button>
+</footer>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(function(){
+'use strict';
+
+var DATA_TYPES=['Phone number','Email address','Home address'];
+var PURPOSES=['Appointment reminders','Admission and fee processing','Order delivery','Insurance claim processing','Fee receipt','Promotional offers'];
+var ORGS=[
+  {id:'o1',name:'City Care Hospital',category:'Healthcare'},
+  {id:'o2',name:'Campus Admissions Office',category:'Education'},
+  {id:'o3',name:'QuickBite Delivery',category:'Online platform'}
+];
+var RECIPIENTS=['Insurance Partner','Fee Payment Gateway','Delivery Partner','Promo Ads Co.'];
+var USER={name:'Riya Thomas',email:'riya.thomas@example.com'};
+var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var STATUS_LABEL={pending:'Waiting for the user',granted:'Granted',declined:'Declined',withdrawn:'Withdrawn'};
+var STATUS_CLASS={pending:'pill-warn',granted:'pill-ok',declined:'pill-neutral',withdrawn:'pill-bad'};
+var TABS={
+  user:[['requests','Requests'],['consents','My consents'],['history','Sharing history'],['notices','Notifications']],
+  org:[['request','Request consent'],['share','Share data'],['audit','Audit report']]
+};
+var ICON_CHECK='<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 7.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+var ICON_X='<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function pad(n){return n<10?'0'+n:''+n;}
+function T(mo,d,h,mi){return new Date(2026,mo,d,h,mi).getTime();}
+function fmt(ts){var d=new Date(ts);return d.getDate()+' '+MONTHS[d.getMonth()]+' '+d.getFullYear()+', '+pad(d.getHours())+':'+pad(d.getMinutes());}
+function fmtDay(ts){var d=new Date(ts);return d.getDate()+' '+MONTHS[d.getMonth()]+' '+d.getFullYear();}
+function list(a){a=a.slice();if(a.length<2)return a.join('');return a.slice(0,-1).join(', ')+' and '+a[a.length-1];}
+function lowerList(a){return list(a.map(function(x){return x.toLowerCase();}));}
+function orgById(id){return ORGS.filter(function(o){return o.id===id;})[0];}
+
+var state,toastTimer;
+
+function seed(){
+  state={
+    role:'user',
+    tab:{user:'requests',org:'request'},
+    actingOrg:'o1',
+    histFilter:'all',
+    confirmId:null,
+    sentId:null,
+    verdict:null,
+    auditText:'',
+    req:{data:[],recipients:[],purpose:PURPOSES[0],error:''},
+    share:{consentId:'',recipient:RECIPIENTS[0],what:DATA_TYPES[0],why:''},
+    nextConsent:105,nextLog:204,nextNote:10,
+    consents:[
+      {id:'C-101',orgId:'o1',purpose:'Appointment reminders',data:['Phone number','Email address'],recipients:[],status:'granted',at:T(9,12,9,30),decidedAt:T(9,12,9,41)},
+      {id:'C-102',orgId:'o2',purpose:'Admission and fee processing',data:['Email address','Home address'],recipients:['Fee Payment Gateway'],status:'granted',at:T(9,10,11,0),decidedAt:T(9,10,11,12)},
+      {id:'C-103',orgId:'o3',purpose:'Order delivery',data:['Phone number','Home address'],recipients:['Delivery Partner'],status:'withdrawn',at:T(9,8,13,5),decidedAt:T(9,20,18,20)},
+      {id:'C-104',orgId:'o1',purpose:'Insurance claim processing',data:['Phone number','Email address'],recipients:['Insurance Partner'],status:'pending',at:T(9,28,15,10),decidedAt:null}
+    ],
+    logs:[
+      {id:'L-201',consentId:'C-102',recipient:'Fee Payment Gateway',what:'Email address',why:'Admission and fee processing',at:T(9,12,10,42),authorized:true,reasons:[]},
+      {id:'L-202',consentId:'C-103',recipient:'Delivery Partner',what:'Home address',why:'Order delivery',at:T(9,14,16,5),authorized:true,reasons:[]},
+      {id:'L-203',consentId:'C-103',recipient:'Promo Ads Co.',what:'Phone number',why:'Promotional offers',at:T(9,21,9,15),authorized:false,reasons:['Consent status is withdrawn','Promo Ads Co. was not named in the request','Consent is for “Order delivery”, sharing is for “Promotional offers”']}
+    ],
+    notes:[
+      {id:'N-1',text:'City Care Hospital requested your phone number and email address for insurance claim processing. Open Requests to decide.',at:T(9,28,15,10),read:false,kind:'info'},
+      {id:'N-2',text:'QuickBite Delivery shared your phone number with Promo Ads Co. for promotional offers. This was not covered by your consent.',at:T(9,21,9,15),read:false,kind:'bad'},
+      {id:'N-3',text:'You withdrew consent for QuickBite Delivery (order delivery).',at:T(9,20,18,20),read:true,kind:'info'},
+      {id:'N-4',text:'Campus Admissions Office shared your email address with Fee Payment Gateway for admission and fee processing. Covered by your consent.',at:T(9,12,10,42),read:true,kind:'ok'}
+    ]
+  };
+}
+
+function consentById(id){return state.consents.filter(function(c){return c.id===id;})[0];}
+function addNote(text,kind){state.notes.unshift({id:'N-'+(state.nextNote++),text:text,at:Date.now(),read:false,kind:kind||'info'});}
+function toast(msg){var el=document.getElementById('toast');el.textContent=msg;el.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(function(){el.hidden=true;},4000);}
+function unread(){return state.notes.filter(function(n){return !n.read;}).length;}
+function pending(){return state.consents.filter(function(c){return c.status==='pending';});}
+function orgConsents(){return state.consents.filter(function(c){return c.orgId===state.actingOrg;}).sort(function(a,b){return b.at-a.at;});}
+function orgLogs(){var ids=orgConsents().map(function(c){return c.id;});return state.logs.filter(function(l){return ids.indexOf(l.consentId)>-1;});}
+
+function chips(arr,cls){return '<span class="chips">'+arr.map(function(x){return '<span class="chip'+(cls?' '+cls:'')+'">'+esc(x)+'</span>';}).join('')+'</span>';}
+function statusPill(s){return '<span class="pill '+STATUS_CLASS[s]+'">'+STATUS_LABEL[s]+'</span>';}
+function sentence(c){
+  var org=orgById(c.orgId).name;
+  var verb=c.recipients.length?'collect and share':'collect';
+  var s=org+' asks to '+verb+' your '+lowerList(c.data)+' for '+c.purpose.toLowerCase()+'. ';
+  s+=c.recipients.length?'It says it will share them with '+list(c.recipients)+'.':'It will keep them for in-house use only.';
+  return s;
+}
+function factsHtml(c){
+  return '<dl class="facts">'+
+    '<div><dt>Data</dt><dd>'+chips(c.data)+'</dd></div>'+
+    '<div><dt>Purpose</dt><dd>'+esc(c.purpose)+'</dd></div>'+
+    '<div><dt>Shared with</dt><dd>'+(c.recipients.length?chips(c.recipients,'amber'):'Nobody. In-house use only.')+'</dd></div>'+
+  '</dl>';
+}
+function head(title,mod){return '<div class="panel-head"><h2>'+esc(title)+'</h2><span class="mod">Module · '+esc(mod)+'</span></div>';}
+function empty(msg){return '<div class="empty"><p>'+msg+'</p></div>';}
+
+function authPill(l){
+  return l.authorized
+    ? '<span class="pill pill-ok">'+ICON_CHECK+'Yes, consented</span>'
+    : '<span class="pill pill-bad">'+ICON_X+'No, not covered</span>';
+}
+function logTable(logs,showVia){
+  if(!logs.length)return empty('No sharing events match this view yet.');
+  var rows=logs.slice().sort(function(a,b){return b.at-a.at;}).map(function(l){
+    var c=consentById(l.consentId),org=orgById(c.orgId);
+    var reasons=l.authorized?'':'<span class="sub">'+l.reasons.map(esc).join('. ')+'.</span>';
+    return '<tr>'+
+      '<td data-label="Who"><strong>'+esc(l.recipient)+'</strong>'+(showVia?'<span class="sub">shared by '+esc(org.name)+'</span>':'')+'</td>'+
+      '<td data-label="What">'+esc(l.what)+'</td>'+
+      '<td data-label="Why">'+esc(l.why)+'</td>'+
+      '<td data-label="When" class="when">'+fmt(l.at)+'</td>'+
+      '<td data-label="Authorized">'+authPill(l)+reasons+'</td>'+
+    '</tr>';
+  }).join('');
+  return '<div class="tablewrap"><table class="log"><thead><tr><th>Who</th><th>What</th><th>Why</th><th>When</th><th>Authorized</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+
+/* ---------- User views ---------- */
+function viewRequests(){
+  var p=pending().sort(function(a,b){return b.at-a.at;});
+  var out=head('Consent requests','Consent Management');
+  if(!p.length)return out+empty('No requests are waiting. Switch to Organization and send one from “Request consent”.');
+  return out+'<div class="stack">'+p.map(function(c){
+    var org=orgById(c.orgId);
+    return '<article class="card"><div class="card-top"><h3>'+esc(org.name)+'</h3><span class="meta">'+esc(c.id)+' · '+fmt(c.at)+'</span></div>'+
+      '<p class="plain">'+esc(sentence(c))+'</p>'+factsHtml(c)+
+      '<div class="actions"><button type="button" class="btn" data-action="decide" data-id="'+c.id+'" data-to="granted">Allow</button>'+
+      '<button type="button" class="btn ghost" data-action="decide" data-id="'+c.id+'" data-to="declined">Decline</button></div>'+
+      '<p class="hint">If you decline, nothing is collected.</p></article>';
+  }).join('')+'</div>';
+}
+function viewConsents(){
+  var granted=state.consents.filter(function(c){return c.status==='granted';}).sort(function(a,b){return b.at-a.at;});
+  var past=state.consents.filter(function(c){return c.status==='declined'||c.status==='withdrawn';}).sort(function(a,b){return b.decidedAt-a.decidedAt;});
+  var out=head('My consents','User Dashboard');
+  if(!granted.length)out+=empty('You have not granted any consent right now.');
+  else out+='<div class="stack">'+granted.map(function(c){
+    var org=orgById(c.orgId),asking=state.confirmId===c.id;
+    var act=asking
+      ? '<div class="actions"><button type="button" class="btn danger" data-action="withdraw" data-id="'+c.id+'">Yes, withdraw consent</button><button type="button" class="btn ghost" data-action="cancel-withdraw">Keep it</button></div><p class="hint">After this, any sharing under this consent is recorded as not authorized.</p>'
+      : '<div class="actions"><button type="button" class="btn danger-ghost" data-action="ask-withdraw" data-id="'+c.id+'">Withdraw consent</button></div>';
+    return '<article class="card"><div class="card-top"><h3>'+esc(org.name)+'</h3>'+statusPill('granted')+'</div>'+
+      '<p class="meta" style="margin:0 0 12px">'+esc(c.id)+' · allowed on '+fmtDay(c.decidedAt)+'</p>'+factsHtml(c)+act+'</article>';
+  }).join('')+'</div>';
+  if(past.length){
+    out+='<div class="sect"><h3>Past decisions</h3><div class="stack">'+past.map(function(c){
+      var org=orgById(c.orgId);
+      return '<article class="card"><div class="card-top"><h3>'+esc(org.name)+'</h3>'+statusPill(c.status)+'</div>'+
+        '<p class="meta" style="margin:0 0 8px">'+esc(c.id)+' · '+(c.status==='declined'?'declined':'withdrawn')+' on '+fmtDay(c.decidedAt)+'</p>'+
+        '<p class="plain" style="margin:0">'+esc(c.purpose)+' · '+esc(lowerList(c.data))+'</p></article>';
+    }).join('')+'</div></div>';
+  }
+  return out;
+}
+function viewHistory(){
+  var f=state.histFilter;
+  var all=state.logs;
+  var shown=all.filter(function(l){return f==='all'||(f==='yes'&&l.authorized)||(f==='no'&&!l.authorized);});
+  var bad=all.filter(function(l){return !l.authorized;}).length;
+  function fb(v,label){return '<button type="button" class="fbtn" data-action="filter" data-value="'+v+'" aria-pressed="'+(f===v)+'">'+label+'</button>';}
+  return head('Who accessed or shared your data','Data Sharing Tracker')+
+    '<p class="plain num" style="margin:0 0 14px">'+all.length+' events recorded, '+bad+' not authorized.</p>'+
+    '<div class="filters">'+fb('all','All')+fb('yes','Authorized')+fb('no','Not authorized')+'</div>'+logTable(shown,true);
+}
+function viewNotices(){
+  var n=state.notes.slice().sort(function(a,b){return b.at-a.at;});
+  var out=head('Notifications','Notification Service');
+  out+='<div class="actions" style="margin-bottom:14px"><button type="button" class="btn ghost" data-action="readall"'+(unread()?'':' disabled')+'>Mark all as read</button></div>';
+  if(!n.length)return out+empty('Nothing here yet.');
+  return out+'<ul class="notes">'+n.map(function(x){
+    var tag=x.kind==='bad'?'<span class="pill pill-bad">'+ICON_X+'Not authorized</span> ':(x.kind==='ok'?'<span class="pill pill-ok">'+ICON_CHECK+'Authorized</span> ':'');
+    return '<li class="note'+(x.read?'':' unread')+'"><span class="dot" aria-hidden="true"></span><div>'+
+      (x.read?'':'<span class="pill pill-warn" style="margin-bottom:6px">New</span> ')+tag+
+      '<p>'+esc(x.text)+'</p><span class="meta">'+fmt(x.at)+'</span></div></li>';
+  }).join('')+'</ul>';
+}
+
+/* ---------- Organization views ---------- */
+function viewRequestForm(){
+  var r=state.req,org=orgById(state.actingOrg);
+  var out=head('Ask the user for consent','Consent Management');
+  if(state.sentId){
+    out+='<div class="sent"><p><strong>Request '+esc(state.sentId)+' sent to '+esc(USER.name)+'.</strong> Nothing is collected until they allow it.</p><button type="button" class="btn" data-action="open-user">Open the user view</button></div>';
+  }
+  var dataOpts=DATA_TYPES.map(function(d,i){
+    return '<label class="opt" for="rd'+i+'"><input type="checkbox" id="rd'+i+'" data-field="req-data" value="'+esc(d)+'"'+(r.data.indexOf(d)>-1?' checked':'')+'>'+esc(d)+'</label>';
+  }).join('');
+  var recOpts=RECIPIENTS.map(function(d,i){
+    return '<label class="opt" for="rr'+i+'"><input type="checkbox" id="rr'+i+'" data-field="req-recip" value="'+esc(d)+'"'+(r.recipients.indexOf(d)>-1?' checked':'')+'>'+esc(d)+'</label>';
+  }).join('');
+  var purOpts=PURPOSES.map(function(p){return '<option'+(r.purpose===p?' selected':'')+'>'+esc(p)+'</option>';}).join('');
+  out+='<form class="form" id="reqForm" novalidate>'+
+    '<p class="plain" style="margin:0">'+esc(org.name)+' ('+esc(org.category)+') must state the purpose and recipients before the user decides.</p>'+
+    '<fieldset><legend>What data do you need?</legend><div class="opts">'+dataOpts+'</div>'+(r.error?'<p class="err" role="alert">'+esc(r.error)+'</p>':'')+'</fieldset>'+
+    '<div><label class="lbl" for="reqPurpose">Why do you need it?</label><select class="sel" id="reqPurpose" data-field="req-purpose">'+purOpts+'</select></div>'+
+    '<fieldset><legend>Will it be shared with anyone?</legend><div class="opts">'+recOpts+'</div><p class="hint">Leave all unticked if the data stays inside your organization.</p></fieldset>'+
+    '<div class="actions"><button type="submit" class="btn">Send consent request</button></div></form>';
+  var mine=orgConsents();
+  if(mine.length){
+    out+='<div class="sect"><h3>Your requests and their outcome</h3><div class="stack">'+mine.map(function(c){
+      return '<article class="card"><div class="card-top"><h3>'+esc(c.purpose)+'</h3>'+statusPill(c.status)+'</div>'+
+        '<p class="meta" style="margin:0 0 10px">'+esc(c.id)+' · requested '+fmt(c.at)+'</p>'+
+        '<p class="plain" style="margin:0">'+esc(lowerList(c.data))+(c.recipients.length?' · shared with '+esc(list(c.recipients)):' · in-house only')+'</p></article>';
+    }).join('')+'</div></div>';
+  }
+  return out;
+}
+function ensureShare(){
+  var mine=orgConsents(),s=state.share;
+  if(!mine.length){s.consentId='';return;}
+  var cur=consentById(s.consentId);
+  if(!cur||cur.orgId!==state.actingOrg){
+    var c=mine[0];
+    s.consentId=c.id;s.why=c.purpose;s.what=c.data[0];s.recipient=c.recipients[0]||RECIPIENTS[0];
+  }
+}
+function verdictHtml(){
+  var v=state.verdict;if(!v)return '';
+  var li=v.checks.map(function(k){
+    return '<li><span class="pill '+(k.ok?'pill-ok':'pill-bad')+'">'+(k.ok?ICON_CHECK+'Pass':ICON_X+'Fail')+'</span><span><strong>'+esc(k.label)+'</strong><span class="sub">'+esc(k.detail)+'</span></span></li>';
+  }).join('');
+  return '<div class="verdict '+(v.authorized?'ok':'bad')+'" role="status"><h3>'+(v.authorized?'Recorded as authorized':'Recorded as not authorized')+'</h3>'+
+    '<p>'+(v.authorized?'This sharing is covered by the user’s consent. The user has been notified.':'This sharing is not covered by the user’s consent. It is on the record and the user has been notified.')+'</p>'+
+    '<ul class="checks">'+li+'</ul></div>';
+}
+function viewShare(){
+  ensureShare();
+  var out=head('Share data with a third party','Data Sharing Tracker');
+  var mine=orgConsents(),s=state.share;
+  if(!mine.length)return out+empty('This organization has no consent requests yet. Send one from “Request consent”.');
+  var cOpts=mine.map(function(c){return '<option value="'+c.id+'"'+(s.consentId===c.id?' selected':'')+'>'+esc(c.id+' · '+c.purpose+' · '+STATUS_LABEL[c.status])+'</option>';}).join('');
+  var rOpts=RECIPIENTS.map(function(x){return '<option'+(s.recipient===x?' selected':'')+'>'+esc(x)+'</option>';}).join('');
+  var wOpts=DATA_TYPES.map(function(x){return '<option'+(s.what===x?' selected':'')+'>'+esc(x)+'</option>';}).join('');
+  var yOpts=PURPOSES.map(function(x){return '<option'+(s.why===x?' selected':'')+'>'+esc(x)+'</option>';}).join('');
+  out+='<form class="form" id="shareForm">'+
+    '<p class="plain" style="margin:0">Every share is checked against the consent and written to the sharing log. It counts as authorized only if the consent is granted, the recipient was named, the data type is covered and the purpose matches.</p>'+
+    '<div><label class="lbl" for="shConsent">Consent to share under</label><select class="sel" id="shConsent" data-field="sh-consent">'+cOpts+'</select></div>'+
+    '<div><label class="lbl" for="shRecipient">Share with</label><select class="sel" id="shRecipient" data-field="sh-recipient">'+rOpts+'</select></div>'+
+    '<div><label class="lbl" for="shWhat">Data being shared</label><select class="sel" id="shWhat" data-field="sh-what">'+wOpts+'</select></div>'+
+    '<div><label class="lbl" for="shWhy">Purpose of sharing</label><select class="sel" id="shWhy" data-field="sh-why">'+yOpts+'</select></div>'+
+    '<div class="actions"><button type="submit" class="btn">Record sharing</button></div>'+
+    '<p class="hint">Try a withdrawn consent, an unnamed recipient or a different purpose to see a not-authorized record.</p></form>'+verdictHtml();
+  var recent=orgLogs();
+  if(recent.length)out+='<div class="sect"><h3>Sharing log for '+esc(orgById(state.actingOrg).name)+'</h3>'+logTable(recent,false)+'</div>';
+  return out;
+}
+function summary(){
+  var org=orgById(state.actingOrg),logs=orgLogs(),cons=orgConsents();
+  var ok=logs.filter(function(l){return l.authorized;}).length;
+  var by={};logs.forEach(function(l){by[l.recipient]=by[l.recipient]||{n:0,ok:0};by[l.recipient].n++;if(l.authorized)by[l.recipient].ok++;});
+  var lines=['Audit summary: '+org.name,'Generated '+fmt(Date.now()),'',
+    'Consents granted: '+cons.filter(function(c){return c.status==='granted';}).length,
+    'Sharing events: '+logs.length,'Authorized: '+ok,'Not authorized: '+(logs.length-ok),''];
+  Object.keys(by).forEach(function(k){lines.push(k+': '+by[k].n+' event(s), '+(by[k].n-by[k].ok)+' not authorized');});
+  return lines.join('\n');
+}
+function viewAudit(){
+  var org=orgById(state.actingOrg),logs=orgLogs(),cons=orgConsents();
+  var ok=logs.filter(function(l){return l.authorized;}).length,bad=logs.length-ok;
+  var by={};logs.forEach(function(l){by[l.recipient]=by[l.recipient]||{n:0,ok:0};by[l.recipient].n++;if(l.authorized)by[l.recipient].ok++;});
+  var names=Object.keys(by).sort();
+  var out=head('Audit report for '+org.name,'Report and Audit');
+  out+='<div class="stats">'+
+    '<div class="stat"><b>'+cons.filter(function(c){return c.status==='granted';}).length+'</b><span>Active consents</span></div>'+
+    '<div class="stat"><b>'+logs.length+'</b><span>Sharing events</span></div>'+
+    '<div class="stat"><b>'+ok+'</b><span>Authorized</span></div>'+
+    '<div class="stat"><b>'+bad+'</b><span>Not authorized</span></div></div>';
+  if(names.length){
+    out+='<div class="sect" style="margin-top:0"><h3>By recipient</h3><div class="tablewrap"><table class="log"><thead><tr><th>Recipient</th><th>Events</th><th>Authorized</th><th>Not authorized</th></tr></thead><tbody>'+
+      names.map(function(k){return '<tr><td data-label="Recipient"><strong>'+esc(k)+'</strong></td><td data-label="Events" class="num">'+by[k].n+'</td><td data-label="Authorized" class="num">'+by[k].ok+'</td><td data-label="Not authorized" class="num">'+(by[k].n-by[k].ok)+'</td></tr>';}).join('')+'</tbody></table></div></div>';
+  }
+  out+='<div class="sect"><h3>All sharing events</h3>'+logTable(logs,false)+'</div>';
+  out+='<div class="sect"><h3>Copy the summary</h3><textarea class="audit" id="auditText" readonly aria-label="Audit summary text">'+esc(summary())+'</textarea>'+
+    '<div class="actions" style="margin-top:10px"><button type="button" class="btn" data-action="copy-audit">Copy audit summary</button></div></div>';
+  return out;
+}
+
+/* ---------- Render ---------- */
+function render(){
+  var active=document.activeElement&&document.activeElement.id;
+  var role=state.role,tab=state.tab[role];
+  document.getElementById('role-user').setAttribute('aria-pressed',role==='user');
+  document.getElementById('role-org').setAttribute('aria-pressed',role==='org');
+
+  var ctx=document.getElementById('ctx');
+  if(role==='user'){
+    ctx.innerHTML='<span>Signed in as <strong>'+esc(USER.name)+'</strong></span><span class="meta">'+esc(USER.email)+'</span>';
+  }else{
+    ctx.innerHTML='<label for="actingOrg">Acting as</label><select class="sel" id="actingOrg" data-field="acting">'+
+      ORGS.map(function(o){return '<option value="'+o.id+'"'+(o.id===state.actingOrg?' selected':'')+'>'+esc(o.name)+'</option>';}).join('')+'</select>';
+  }
+
+  document.getElementById('tabs').innerHTML=TABS[role].map(function(t){
+    var badge='';
+    if(role==='user'&&t[0]==='requests'&&pending().length)badge='<span class="badge">'+pending().length+'</span>';
+    if(role==='user'&&t[0]==='notices'&&unread())badge='<span class="badge">'+unread()+'</span>';
+    return '<button type="button" role="tab" id="tab-'+t[0]+'" class="tab" data-action="tab" data-tab="'+t[0]+'" aria-selected="'+(tab===t[0])+'">'+t[1]+badge+'</button>';
+  }).join('');
+
+  var views={
+    user:{requests:viewRequests,consents:viewConsents,history:viewHistory,notices:viewNotices},
+    org:{request:viewRequestForm,share:viewShare,audit:viewAudit}
+  };
+  document.getElementById('view').innerHTML=views[role][tab]();
+  if(active){var el=document.getElementById(active);if(el)el.focus();}
+}
+
+/* ---------- Actions ---------- */
+function decide(id,to){
+  var c=consentById(id);if(!c||c.status!=='pending')return;
+  var org=orgById(c.orgId).name;
+  c.status=to;c.decidedAt=Date.now();
+  if(to==='granted'){addNote('You allowed '+org+' to use your '+lowerList(c.data)+' for '+c.purpose.toLowerCase()+'.','info');toast('Consent granted to '+org);}
+  else{addNote('You declined '+org+'’s request. Your data was not collected.','info');toast('Request declined. Nothing is collected.');}
+  render();
+}
+function withdraw(id){
+  var c=consentById(id);if(!c||c.status!=='granted')return;
+  var org=orgById(c.orgId).name;
+  c.status='withdrawn';c.decidedAt=Date.now();state.confirmId=null;
+  addNote('You withdrew consent for '+org+' ('+c.purpose.toLowerCase()+'). Further sharing will be recorded as not authorized.','info');
+  toast('Consent withdrawn');render();
+}
+function sendRequest(){
+  var r=state.req;
+  if(!r.data.length){r.error='Pick at least one type of data.';render();return;}
+  var c={id:'C-'+(state.nextConsent++),orgId:state.actingOrg,purpose:r.purpose,data:DATA_TYPES.filter(function(d){return r.data.indexOf(d)>-1;}),recipients:RECIPIENTS.filter(function(d){return r.recipients.indexOf(d)>-1;}),status:'pending',at:Date.now(),decidedAt:null};
+  state.consents.push(c);
+  addNote(orgById(c.orgId).name+' requested your '+lowerList(c.data)+' for '+c.purpose.toLowerCase()+'. Open Requests to decide.','info');
+  state.sentId=c.id;state.req={data:[],recipients:[],purpose:PURPOSES[0],error:''};
+  toast('Consent request '+c.id+' sent');render();
+}
+function recordShare(){
+  var s=state.share,c=consentById(s.consentId);if(!c)return;
+  var checks=[
+    {ok:c.status==='granted',label:'Consent is currently granted',detail:'Status: '+STATUS_LABEL[c.status].toLowerCase()},
+    {ok:c.recipients.indexOf(s.recipient)>-1,label:'Recipient was named in the request',detail:s.recipient+(c.recipients.indexOf(s.recipient)>-1?' was named':' was not named')},
+    {ok:c.data.indexOf(s.what)>-1,label:'Data type is covered',detail:s.what+(c.data.indexOf(s.what)>-1?' is covered':' is not covered')},
+    {ok:s.why===c.purpose,label:'Purpose matches the consent',detail:s.why===c.purpose?'Purpose: '+s.why:'Consent is for “'+c.purpose+'”, sharing is for “'+s.why+'”'}
+  ];
+  var authorized=checks.every(function(k){return k.ok;});
+  var reasons=checks.filter(function(k){return !k.ok;}).map(function(k){
+    return k.label==='Consent is currently granted'?'Consent status is '+c.status:k.detail;
+  });
+  var log={id:'L-'+(state.nextLog++),consentId:c.id,recipient:s.recipient,what:s.what,why:s.why,at:Date.now(),authorized:authorized,reasons:reasons};
+  state.logs.push(log);
+  var org=orgById(c.orgId).name;
+  addNote(org+' shared your '+s.what.toLowerCase()+' with '+s.recipient+' for '+s.why.toLowerCase()+'. '+(authorized?'Covered by your consent.':'This was not covered by your consent.'),authorized?'ok':'bad');
+  state.verdict={authorized:authorized,checks:checks};
+  toast(authorized?'Sharing recorded as authorized':'Sharing recorded as not authorized');
+  render();
+}
+function copyAudit(){
+  var text=summary(),ta=document.getElementById('auditText');
+  function fallback(){if(ta){ta.focus();ta.select();}toast('Summary selected. Copy it with your device’s copy command.');}
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){toast('Audit summary copied');},fallback);
+    }else fallback();
+  }catch(e){fallback();}
+}
+
+document.addEventListener('click',function(e){
+  var b=e.target.closest('[data-action]');if(!b)return;
+  var a=b.getAttribute('data-action');
+  if(a==='role'){state.role=b.getAttribute('data-role');state.confirmId=null;render();}
+  else if(a==='tab'){state.tab[state.role]=b.getAttribute('data-tab');state.confirmId=null;if(state.role==='org')state.sentId=null;render();}
+  else if(a==='decide')decide(b.getAttribute('data-id'),b.getAttribute('data-to'));
+  else if(a==='ask-withdraw'){state.confirmId=b.getAttribute('data-id');render();}
+  else if(a==='cancel-withdraw'){state.confirmId=null;render();}
+  else if(a==='withdraw')withdraw(b.getAttribute('data-id'));
+  else if(a==='filter'){state.histFilter=b.getAttribute('data-value');render();}
+  else if(a==='readall'){state.notes.forEach(function(n){n.read=true;});render();}
+  else if(a==='open-user'){state.role='user';state.tab.user='requests';state.sentId=null;render();window.scrollTo(0,0);}
+  else if(a==='copy-audit')copyAudit();
+  else if(a==='reset'){seed();render();toast('Sample data restored');}
+});
+document.addEventListener('change',function(e){
+  var f=e.target.getAttribute&&e.target.getAttribute('data-field');if(!f)return;
+  var v=e.target.value;
+  if(f==='acting'){state.actingOrg=v;state.verdict=null;state.sentId=null;state.share.consentId='';render();}
+  else if(f==='req-data'||f==='req-recip'){
+    var arr=f==='req-data'?state.req.data:state.req.recipients,i=arr.indexOf(v);
+    if(e.target.checked&&i<0)arr.push(v);if(!e.target.checked&&i>-1)arr.splice(i,1);
+    if(f==='req-data')state.req.error='';
+  }
+  else if(f==='req-purpose')state.req.purpose=v;
+  else if(f==='sh-consent'){
+    var c=consentById(v);state.share.consentId=v;
+    if(c){state.share.why=c.purpose;state.share.what=c.data[0];state.share.recipient=c.recipients[0]||state.share.recipient;}
+    state.verdict=null;render();
+  }
+  else if(f==='sh-recipient')state.share.recipient=v;
+  else if(f==='sh-what')state.share.what=v;
+  else if(f==='sh-why')state.share.why=v;
+});
+document.addEventListener('submit',function(e){
+  e.preventDefault();
+  if(e.target.id==='reqForm')sendRequest();
+  else if(e.target.id==='shareForm')recordShare();
+});
+
+seed();render();
+})();
+</script>
+
+</body>
+</html>
